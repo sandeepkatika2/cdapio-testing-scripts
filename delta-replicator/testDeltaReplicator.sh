@@ -12,6 +12,7 @@ for arg in "$@"; do
 	"--numOfTables")   set -- "$@" "-n" ;;
 	"--rowSizeBytes")   set -- "$@" "-s" ;;
 	"--durationMins")   set -- "$@" "-d" ;;
+    "--app")   set -- "$@" "-a" ;;
     *)        set -- "$@" "$arg"
   esac
 done
@@ -25,6 +26,7 @@ port=3306
 num_of_tables=1
 row_size=100
 terminate_duration=10
+app="MySQLTest"
 
 # Parse short options
 while getopts "o":"u":"p":"z":"n":"s":"d":"h": opt
@@ -37,6 +39,7 @@ do
 	"n") num_of_tables=${OPTARG} ;;
 	"s") row_size=${OPTARG} ;;
 	"d") terminate_duration=${OPTARG} ;;
+    "a") app=${OPTARG} ;;
 	"h") echo "Example: ./testDeltaReplicator.sh --host localhost --user root --password pwd --timezone PST --port 3306 --numOfTables 100 --rowSizeBytes 10000 --durationMins 15"; exit 0 ;;
     "?") echo "Invalid Option(s)" >&2; exit 1 ;;
   esac
@@ -51,6 +54,7 @@ echo "port : $port"
 echo "num of tables : $num_of_tables"
 echo "row size in bytes : $row_size"
 echo "terminate duration in minutes : $terminate_duration"
+echo "app name : $app"
 echo "========================================================"
 
 # comments
@@ -60,7 +64,7 @@ printf "\n\n**Starting Delta Replicator MySQL Testing**\n"
 #echo $CP
 
 printf "\n\n==Stop Current Delta Replicator==\n"
-curl -XPOST localhost:11015/v3/namespaces/default/apps/MySQLTest/workers/DeltaWorker/stop
+curl -XPOST localhost:11015/v3/namespaces/default/apps/$app/workers/DeltaWorker/stop
 
 # Compile current java files
 javac -cp .:$CP -d code/output code/*.java
@@ -70,7 +74,7 @@ java -cp ./code/output:$CP TableCreator $host $user $password $timezone $port $n
 
 printf "\n\n==Start Current Delta Replicator==\n"
 rm -rf /tmp/Replicator
-curl -XPOST localhost:11015/v3/namespaces/default/apps/MySQLTest/workers/DeltaWorker/start
+curl -XPOST localhost:11015/v3/namespaces/default/apps/$app/workers/DeltaWorker/start
 
 printf "\n\n==Waiting For 1min To Get All Tables Snapshotted==\n"
 sleep 60
