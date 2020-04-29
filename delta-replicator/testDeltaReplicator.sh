@@ -29,7 +29,7 @@ terminate_duration=10
 app="MySQLTest"
 
 # Parse short options
-while getopts "o":"u":"p":"z":"n":"s":"d":"h": opt
+while getopts "o":"u":"p":"z":"n":"s":"d":"a":"h": opt
 do
   case "$opt" in
     "o") host=${OPTARG} ;;
