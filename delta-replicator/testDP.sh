@@ -17,9 +17,9 @@ for arg in "$@"; do
   esac
 done
 # Default behavior
-host="35.230.3.189"
-user="shifuxu"
-password="xsf4662187"
+host="localhost"
+user="root"
+password="pwd"
 timezone="PST"
 port=1433
 num_of_tables=100
@@ -40,7 +40,7 @@ do
     "d") terminate_duration=${OPTARG} ;;
     "b") batch_size=${OPTARG} ;;
     "f") update_factor=${OPTARG} ;;
-    "h") echo "Example: ./testDP.sh --host localhost --user root --password pwd --timezone PST --port 3306 --numOfT
+    "h") echo "Example: ./testDP.sh --host localhost --user root --password pwd --timezone PST --port 1433 --numOfT
 ables 100 --rowSizeBytes 10000 --durationMins 15 --batchSize 1 --updateFactor 1.0"; exit 0 ;;
     "?") echo "Invalid Option(s)" >&2; exit 1 ;;
   esac
