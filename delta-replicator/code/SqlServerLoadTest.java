@@ -1,14 +1,6 @@
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
-import java.util.Random;
-import java.util.Scanner;
+import java.sql.*;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,11 +12,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class SqlServerLoadTest {
-  private static final String DB = "sqlserver_db";
+  private static final String DB = "a_sql_10tbl";
   private static final String TABLE_PREFIX = "mytable";
   private static final int INIT_DELAY_IN_SECONDS = 0;
   private static final int PERIOD_IN_SECONDS = 1;
   private static List<AtomicLong> counterList;
+  private static LocalDateTime sTime;
+  private static LocalDateTime eTime;
 
   public static void main(String[] args) {
     String host = args[0];
@@ -37,7 +31,7 @@ public class SqlServerLoadTest {
     int terminateDurationInMins = Integer.parseInt(args[7]);
     int batchSize = Integer.parseInt(args[8]);
     double updateFactor = Double.parseDouble(args[9]);
-    int chunkSize = 50000;
+    int chunkSize = 5;
     int remain = rowSizeInBytes % chunkSize;
     int numOfBodyColumns = remain == 0 ? rowSizeInBytes / chunkSize : rowSizeInBytes / chunkSize + 1;
     Random random = new Random();
@@ -48,13 +42,17 @@ public class SqlServerLoadTest {
       createStatement += "body" + (i + 1) + " text, ";
       queryStatement += "body" + (i + 1) + ", ";
     }
-    createStatement += "create_at date null)";
-    queryStatement += "create_at) VALUES (";
+    queryStatement = queryStatement.substring(0, queryStatement.lastIndexOf(","));
+    createStatement += "create_at DATETIME2(0) NOT NULL DEFAULT(GETDATE()), mod_at DATETIME2(0) NOT NULL DEFAULT(GETDATE()))";
+    queryStatement += ") VALUES (";
     for (int i = 0; i < numOfBodyColumns; i++) {
       queryStatement += "?, ";
     }
-    queryStatement += "?)";
+    queryStatement = queryStatement.substring(0, queryStatement.lastIndexOf(","));
+    queryStatement += ")";
     final String finalQueryStatement = queryStatement;
+    System.out.println("createStatement: "+createStatement);
+    System.out.println("queryStatement: " + queryStatement);
 
     try {
       Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
@@ -68,13 +66,13 @@ public class SqlServerLoadTest {
       try (Connection connection = DriverManager.getConnection(connURL, properties);
            Statement statement = connection.createStatement()) {
         statement.execute("IF (DB_ID('" + DB + "') IS NOT NULL)\n" +
-                            "\tBEGIN\n" +
-                            "\tUSE master;\n" +
-                            "\tALTER DATABASE " + DB + "\n" +
-                            "\tSET SINGLE_USER \n" +
-                            "\tWITH ROLLBACK IMMEDIATE\n" +
-                            "\tDROP DATABASE " + DB + ";\n" +
-                            "\tEND");
+                "\tBEGIN\n" +
+                "\tUSE master;\n" +
+                "\tALTER DATABASE " + DB + "\n" +
+                "\tSET SINGLE_USER \n" +
+                "\tWITH ROLLBACK IMMEDIATE\n" +
+                "\tDROP DATABASE " + DB + ";\n" +
+                "\tEND");
         statement.execute("CREATE DATABASE " + DB);
         System.out.println(String.format("CREATED DATABASE:%s", DB));
       }
@@ -85,7 +83,7 @@ public class SqlServerLoadTest {
         for (int i = 1; i <= numOfTables; i++) {
           try (Statement statement = connection.createStatement()) {
             statement.execute(
-              String.format(createStatement, TABLE_PREFIX + i));
+                    String.format(createStatement, TABLE_PREFIX + i));
           }
         }
         System.out.println(String.format("CREATED %d TABLE(S)", numOfTables));
@@ -98,7 +96,7 @@ public class SqlServerLoadTest {
         for (int i = 1; i <= numOfTables; i++) {
           try (Statement statement = connection.createStatement()) {
             statement.execute(
-              String.format("EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'%s', @role_name = NULL", TABLE_PREFIX + i));
+                    String.format("EXEC sys.sp_cdc_enable_table @source_schema = N'dbo', @source_name = N'%s', @role_name = NULL", TABLE_PREFIX + i));
           }
         }
         System.out.println("ENABLED CDC FOR ALL TABLE(S)");
@@ -117,14 +115,14 @@ public class SqlServerLoadTest {
             if (remain != 0) {
               ps.setString(index++, getAlphaNumericString(remain));
             }
-            ps.setDate(index, Date.valueOf(LocalDate.now()));
+            //ps.setTimestamp(index, Timestamp.valueOf(LocalDateTime.now()));
             ps.execute();
           }
         }
         System.out.println("FINISHED PRELOAD ONE RECORD TO EACH TABLE");
       }
 
-      try (Scanner scanner = new Scanner(System.in)) {
+     /* try (Scanner scanner = new Scanner(System.in)) {
         while (true) {
           System.out.print("Do you want to start inserting rows into tables now, type yes/no:");
           String option = scanner.next();
@@ -138,7 +136,7 @@ public class SqlServerLoadTest {
             System.out.println("Do not recognize what you have typed, please try it again!");
           }
         }
-      }
+      }*/
 
       ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
       final ThreadFactory threadFactory = runnable -> {
@@ -159,12 +157,14 @@ public class SqlServerLoadTest {
       // String update = String.format("UPDATE %s SET name = 'product' WHERE id = ?", TABLE);
       // delete sample data
       // String delete = String.format("DELETE FROM %s WHERE id = ?", TABLE;
+      sTime = LocalDateTime.now();
       Runnable task = () -> {
         List<Future> futures = new ArrayList<>(numOfTables);
-        for (int i = 1; i <= numOfTables; i++) {
+        try {
+          Connection connection = DriverManager.getConnection(finalConnURL, properties);
+          for (int i = 1; i <= numOfTables; i++) {
           final int tableId = i;
           futures.add(executorService.submit((Callable<Void>) () -> {
-            try (Connection connection = DriverManager.getConnection(finalConnURL, properties)) {
               long startTime = System.currentTimeMillis();
               String insert = String.format(finalQueryStatement, TABLE_PREFIX + tableId);
               try (PreparedStatement ps = connection.prepareStatement(insert)) {
@@ -180,7 +180,6 @@ public class SqlServerLoadTest {
                   if (remain != 0) {
                     ps.setString(index++, getAlphaNumericString(remain));
                   }
-                  ps.setDate(index, Date.valueOf(LocalDate.now()));
                   ps.addBatch();
                 }
                 ps.executeBatch();
@@ -188,9 +187,10 @@ public class SqlServerLoadTest {
               long count = counterList.get(tableId - 1).incrementAndGet();
               long endTime = System.currentTimeMillis();
               System.out.println(String.format("Inserted %d row(s) with size %d bytes to table:%s using %fs", count * batchSize,
-                                               rowSizeInBytes, TABLE_PREFIX + tableId, (endTime - startTime) / 1000.0));
+                      rowSizeInBytes, TABLE_PREFIX + tableId, (endTime - startTime) / 1000.0));
               startTime = System.currentTimeMillis();
-              String update = String.format("UPDATE %s SET body1 = 'xyz123' WHERE id = ?", TABLE_PREFIX + tableId);
+              String updateColumn = getAlphaNumericString(chunkSize);
+              String update = String.format("UPDATE %s SET body1 = '" + updateColumn + "', mod_at = GETDATE() WHERE id = ?", TABLE_PREFIX + tableId);
               int updateBatchSize = Math.max(1, (int)(updateFactor * batchSize));
               try (PreparedStatement ps = connection.prepareStatement(update)) {
                 for (int j = 1; j <= updateBatchSize; j++) {
@@ -202,13 +202,28 @@ public class SqlServerLoadTest {
               }
               endTime = System.currentTimeMillis();
               System.out.println(String.format("Updated %d row(s) with 'body1' field to table:%s using %fs",
-                                               count * updateBatchSize, TABLE_PREFIX + tableId, (endTime - startTime) / 1000.0));
-            } catch (Exception e) {
-              e.printStackTrace();
-            }
+                      count * updateBatchSize, TABLE_PREFIX + tableId, (endTime - startTime) / 1000.0));
+              String delete = String.format("DELETE FROM %s WHERE id = ?", TABLE_PREFIX + tableId);
+              try (PreparedStatement ps = connection.prepareStatement(delete)) {
+                for (int j = 1; j <= 1; j++) {
+                  int low = (int) (count * batchSize);
+                  int randId = low;
+                  ps.setInt(1, randId);
+                  ps.addBatch();
+                }
+                ps.executeBatch();
+              } catch (SQLException e) {
+                e.printStackTrace();
+              }
+            System.out.println(String.format("Deleted %d row(s) from table: %s in %fs",
+                    count, TABLE_PREFIX + tableId, (endTime - startTime) / 1000.0));
             return null;
           }));
         }
+      } catch (SQLException e) {
+        System.out.println("exception in task");
+        e.printStackTrace();
+      }
 
         Exception exception = null;
         for (Future future : futures) {
@@ -229,30 +244,45 @@ public class SqlServerLoadTest {
       };
 
       ScheduledFuture<?> future =
-        scheduledExecutorService.scheduleAtFixedRate(task, INIT_DELAY_IN_SECONDS, PERIOD_IN_SECONDS, TimeUnit.SECONDS);
+              scheduledExecutorService.scheduleAtFixedRate(task, INIT_DELAY_IN_SECONDS, PERIOD_IN_SECONDS, TimeUnit.SECONDS);
 
       Thread.sleep(TimeUnit.MINUTES.toMillis(terminateDurationInMins));
       System.out.println("Time up, shutdown executors!");
       future.cancel(true);
+
       scheduledExecutorService.shutdown();
+      System.out.println(scheduledExecutorService.isTerminated());
+
       executorService.shutdown();
+      System.out.println(executorService.isTerminated());
+
       try {
+        System.out.println("attempt to shutdown executor");
         scheduledExecutorService.awaitTermination(10, TimeUnit.SECONDS);
         executorService.awaitTermination(10, TimeUnit.SECONDS);
       } catch (InterruptedException e) {
+        System.err.println("tasks interrupted");
         e.printStackTrace();
+      } finally {
+        System.out.println(scheduledExecutorService.isTerminated());
+        System.out.println(executorService.isTerminated());
       }
+
     } catch (Exception e) {
       e.printStackTrace();
     }
+    eTime = LocalDateTime.now();
+    System.out.println("startTime: " + sTime);
+    System.out.println("endTime: " + eTime);
+    System.out.println("Program has finished");
   }
 
   // function to generate a random string of length n
   private static String getAlphaNumericString(int n) {
     // chose a Character random from this String
     String AlphaNumericString = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      + "0123456789"
-      + "abcdefghijklmnopqrstuvxyz";
+            + "0123456789"
+            + "abcdefghijklmnopqrstuvxyz";
 
     // create StringBuffer size of AlphaNumericString
     StringBuilder sb = new StringBuilder(n);

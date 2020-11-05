@@ -8,6 +8,7 @@ for arg in "$@"; do
     "--user")   set -- "$@" "-u" ;;
     "--password")   set -- "$@" "-p" ;;
     "--timezone")   set -- "$@" "-z" ;;
+    "--port")   set -- "$@" "-t" ;;	
     "--numOfTables")   set -- "$@" "-n" ;;
     "--rowSizeBytes")   set -- "$@" "-s" ;;
     "--durationMins")   set -- "$@" "-d" ;;
@@ -28,13 +29,14 @@ terminate_duration=5
 batch_size=1
 update_factor=1.0
 # Parse short options
-while getopts "o":"u":"p":"z":"n":"s":"d":"b":"h":"f": opt
+while getopts "o":"u":"p":"z":"t":"n":"s":"d":"b":"h":"f": opt
 do
   case "$opt" in
     "o") host=${OPTARG} ;;
     "u") user=${OPTARG} ;;
     "p") password=${OPTARG} ;;
     "z") timezone=${OPTARG} ;;
+    "t") port=${OPTARG} ;;	
     "n") num_of_tables=${OPTARG} ;;
     "s") row_size=${OPTARG} ;;
     "d") terminate_duration=${OPTARG} ;;
@@ -58,7 +60,7 @@ echo "batch size : $batch_size"
 echo "update factor : $update_factor"
 echo "========================================================"
 # comments
-CP=$PWD/jdbc/mssql-jdbc-8.2.0.jre8.jar
+CP=$PWD/jdbc/mssql-jdbc-8.2.1.jre8.jar
 printf "\n\n**Starting Delta Replicator SQL Server Testing**\n"
 echo $CP
 # Compile current java files
@@ -66,5 +68,4 @@ javac -cp .:$CP -d code/output code/*.java
 printf "\n\n==Start Inserting Rows into Table(s)==\n"
 now=$(date)
 printf "Current Time:%s\n" "$now"
-java -cp ./code/output:$CP SqlServerLoadTest $host $user $password $timezone $port $num_of_tables $row_size $termin
-ate_duration $batch_size $update_factor
+java -cp ./code/output:$CP SqlServerLoadTest $host $user $password $timezone $port $num_of_tables $row_size $terminate_duration $batch_size $update_factor
